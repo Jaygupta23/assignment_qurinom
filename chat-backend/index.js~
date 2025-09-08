@@ -1,0 +1,75 @@
+require('dotenv').config();
+const express = require('express');
+const http = require('http');
+const mongoose = require('mongoose');
+const cors = require('cors');
+
+const app = express();
+const server = http.createServer(app);
+const io = require('socket.io')(server, {
+  cors: { origin: '*' }
+});
+
+// connect DB
+mongoose.connect(process.env.MONGO_URI).then(()=>console.log('Mongo connected'));
+
+// middlewares
+app.use(cors());
+app.use(express.json());
+
+// simple user->socket map
+const onlineUsers = new Map();
+
+io.on('connection', socket => {
+  console.log('socket connected', socket.id);
+
+  // client should send "init" with their userId after connect
+  socket.on('init', (userId) => {
+    onlineUsers.set(userId, socket.id);
+    console.log('user online:', userId);
+  });
+
+  socket.on('disconnect', () => {
+    // remove mapping
+    for (const [userId, sockId] of onlineUsers.entries()) {
+      if (sockId === socket.id) {
+        onlineUsers.delete(userId);
+        break;
+      }
+    }
+    console.log('socket disconnected', socket.id);
+  });
+});
+
+// mount routes (implementations below)
+const authRoutes = require('./routes/auth');
+const chatRoutes = require('./routes/chats');
+const messageRoutes = require('./routes/messages');
+
+app.use('/user', authRoutes);
+app.use('/chats', chatRoutes);
+app.use('/messages', messageRoutes);
+
+// helper to emit new message to participants
+const Message = require('./models/Message');
+const Chat = require('./models/Chat');
+
+async function emitNewMessage(message) {
+  // populate sender and chat participants
+  const dbMsg = await Message.findById(message._id).populate('senderId', 'name').exec();
+  const chat = await Chat.findById(dbMsg.chatId);
+  if (!chat) return;
+  // send to all participants except sender
+  chat.participants.forEach(pid => {
+    const sid = onlineUsers.get(String(pid));
+    if (sid && sid !== onlineUsers.get(String(dbMsg.senderId))) {
+      io.to(sid).emit('new_message', dbMsg);
+    }
+  });
+}
+
+// export emit helper so controllers can call it
+module.exports = { server, io, emitNewMessage };
+
+const PORT = process.env.PORT || 6065;
+server.listen(PORT, () => console.log('Server listening on', PORT));

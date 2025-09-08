@@ -1,0 +1,32 @@
+import '../data_providers/api_provider.dart';
+import '../models/chat.dart';
+import '../models/message.dart';
+import 'package:dio/dio.dart';
+
+class ChatRepository {
+  final Dio _dio = ApiProvider().dio;
+
+  Future<List<Chat>> getUserChats(String userId) async {
+    final resp = await _dio.get('/chats/user-chats/$userId');
+    final list = resp.data['chats'] as List;
+    return list.map((e) => Chat.fromJson(e)).toList();
+  }
+
+  Future<List<Message>> getMessages(String chatId) async {
+    final resp = await _dio.get('/messages/get-messagesformobile/$chatId');
+    final list = resp.data['messages'] as List;
+    return list.map((e) => Message.fromJson(e)).toList();
+  }
+
+  Future<Message> sendMessage({required String chatId, required String senderId, required String content, String messageType='text', String fileUrl = ''}) async {
+    final resp = await _dio.post('/messages/sendMessage', data: {
+      'chatId': chatId,
+      'senderId': senderId,
+      'content': content,
+      'messageType': messageType,
+      'fileUrl': fileUrl
+    });
+    final msg = resp.data['message'] ?? resp.data;
+    return Message.fromJson(msg);
+  }
+}
