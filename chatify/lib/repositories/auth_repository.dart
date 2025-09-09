@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthResult {
   final String userId;
@@ -24,20 +25,18 @@ class AuthRepository {
       headers: {"Content-Type": "application/json"},
       body: jsonEncode(body),
     );
-
+    final responseBody = jsonDecode(response.body);
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-
+      final data = responseBody['data'];
       final userId = data["user"]["_id"];
       final token = data["token"];
-
       if (userId != null && token != null) {
         return AuthResult(userId, token);
       } else {
         throw Exception("Invalid response structure");
       }
     } else {
-      throw Exception("Login failed: ${response.body}");
+      throw Exception(responseBody["msg"] ?? "Something went wrong");
     }
   }
 }

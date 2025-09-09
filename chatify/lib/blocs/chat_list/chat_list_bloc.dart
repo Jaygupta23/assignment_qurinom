@@ -3,7 +3,7 @@ import '../../models/chat.dart';
 import '../../utils/secure_storage.dart';
 import '../../repositories/chat_repository.dart';
 import 'chat_list_event.dart';
-import 'chat_list_state.dart';   // ✅ correct import
+import 'chat_list_state.dart';
 
 class ChatListBloc extends Bloc<ChatListEvent, ChatListState> {
   final ChatRepository repo;
@@ -13,7 +13,8 @@ class ChatListBloc extends Bloc<ChatListEvent, ChatListState> {
       emit(ChatListLoading());
       try {
         final token = await SecureStorage.getToken() ?? "";
-        final chats = (await repo.getUserChats(event.userId, token)).cast<Chat>();
+        final data = await repo.getUserChats(event.userId, token);
+        final chats = data.map<Chat>((json) => Chat.fromJson(json)).toList();
         emit(ChatListLoaded(chats));
       } catch (e) {
         emit(ChatListError(e.toString()));

@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+# Ignore only node_modules inside chat-backend
+/chat-backend/node_modules/
+

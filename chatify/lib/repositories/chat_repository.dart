@@ -6,15 +6,15 @@ class ChatRepository {
 
   Future<List<dynamic>> getUserChats(String userId, String token) async {
     final url = Uri.parse("$baseUrl/chats/user-chats/$userId");
-
+    // print("Fetching chats for userId: $userId with token: $token , url: $url");
     final response = await http.get(
       url,
       headers: {"Authorization": "Bearer $token"},
     );
-
+    // print("Response status: ${response.body}");
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data["chats"] ?? [];
+      return data?? [];
     } else {
       throw Exception("Failed to load chats: ${response.body}");
     }
@@ -30,7 +30,16 @@ class ChatRepository {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data["messages"] ?? [];
+
+      if (data is List) {
+        // API returned a list of messages
+        return data;
+      } else if (data is Map && data.containsKey("messages")) {
+        // API returned { "messages": [...] }
+        return data["messages"];
+      } else {
+        return [];
+      }
     } else {
       throw Exception("Failed to load messages: ${response.body}");
     }
@@ -63,7 +72,7 @@ class ChatRepository {
       body: jsonEncode(body),
     );
 
-    if (response.statusCode == 200) {
+    if (response.statusCode == 200 || response.statusCode == 201) {
       return jsonDecode(response.body);
     } else {
       throw Exception("Failed to send message: ${response.body}");

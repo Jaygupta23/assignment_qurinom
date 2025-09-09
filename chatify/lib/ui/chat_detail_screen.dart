@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import '../blocs/chat_detail/chat_detail_bloc.dart';
 import '../blocs/chat_detail/chat_detail_event.dart';
 import '../blocs/chat_detail/chat_detail_state.dart';
@@ -10,10 +11,12 @@ import '../utils/secure_storage.dart';
 class ChatDetailScreen extends StatefulWidget {
   final String chatId;
   final String currentUserId;
+  final String chatTitle;
   const ChatDetailScreen({
     super.key,
     required this.chatId,
     required this.currentUserId,
+    required this.chatTitle,
   });
 
   @override
@@ -22,6 +25,25 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _controller = TextEditingController();
+  late final ChatDetailBloc _bloc;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _bloc = ChatDetailBloc(
+      context.read<ChatRepository>(),
+      SocketProvider(),
+      widget.chatId,
+    )..add(LoadMessages(widget.chatId));
+  }
+
+  @override
+  void dispose() {
+    _bloc.close();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,15 +55,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final token = snapshot.data!;
-        return BlocProvider(
-          create: (_) => ChatDetailBloc(
-            context.read<ChatRepository>(),     // repo
-            SocketProvider(),                   // socket
-            widget.chatId,
-          )..add(LoadMessages(widget.chatId)),
+
+        return BlocProvider.value(
+          value: _bloc,
           child: Scaffold(
-            appBar: AppBar(title: const Text("Chat")),
+            appBar: AppBar(title: Text(widget.chatTitle)),
             body: Column(
               children: [
                 Expanded(
@@ -49,31 +67,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     builder: (context, state) {
                       if (state is ChatDetailLoading) {
                         return const Center(child: CircularProgressIndicator());
-                      } else if (state is ChatDetailLoaded ||
-                          state is ChatDetailMessageSent ||
-                          state is ChatDetailMessageSending) {
-                        final messages = (state as dynamic).messages;
+                      } else if (state is ChatDetailLoaded) {
+                        final messages = state.messages;
                         return ListView.builder(
                           reverse: true,
                           itemCount: messages.length,
                           itemBuilder: (ctx, i) {
                             final msg = messages[messages.length - 1 - i];
-                            final isMine = msg.senderId == widget.currentUserId;
+                            final isMine = msg["senderId"] == widget.currentUserId;
+
+                            final sentAt = DateTime.tryParse(msg["sentAt"] ?? "");
+                            final formattedTime = sentAt != null
+                                ? DateFormat('hh:mm a').format(sentAt)
+                                : "";
+
                             return Align(
-                              alignment: isMine
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
+                              alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
                               child: Container(
-                                margin: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: isMine
-                                      ? Colors.blue[200]
-                                      : Colors.grey[300],
+                                  color: isMine ? Colors.blue[200] : Colors.grey[300],
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: Text(msg.content),
+                                child: Column(
+                                  crossAxisAlignment: isMine
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
+                                  children: [
+                                    Text(msg["content"] ?? "", style: const TextStyle(fontSize: 16)),
+                                    const SizedBox(height: 4),
+                                    Text(formattedTime,
+                                        style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                  ],
+                                ),
                               ),
                             );
                           },
@@ -92,8 +119,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       Expanded(
                         child: TextField(
                           controller: _controller,
-                          decoration:
-                          const InputDecoration(hintText: "Type a message"),
+                          decoration: const InputDecoration(hintText: "Type a message"),
                         ),
                       ),
                       IconButton(
@@ -101,13 +127,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                         onPressed: () {
                           final content = _controller.text.trim();
                           if (content.isNotEmpty) {
-                            context.read<ChatDetailBloc>().add(
-                              SendMessageRequested(widget.chatId, content),
-                            );
+                            _bloc.add(SendMessageRequested(widget.chatId, content));
                             _controller.clear();
                           }
                         },
-                      )
+                      ),
                     ],
                   ),
                 ),
@@ -119,3 +143,4 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 }
+

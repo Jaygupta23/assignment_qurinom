@@ -39,6 +39,7 @@ class ChatDetailBloc extends Bloc<ChatDetailEvent, ChatDetailState> {
       final msgs = await repo.getMessages(chatId, token);
       emit(ChatDetailLoaded(msgs));
     } catch (e) {
+      print("Error loading messages: $e");
       emit(ChatDetailError(e.toString()));
     }
   }
